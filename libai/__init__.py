@@ -91,17 +91,20 @@ CHATS_CHOICES = click.Choice(_chats())
 @click.argument("prompt", type=str, required=False)
 @click.option("--chat", help="chat file name to load as context", type=CHATS_CHOICES)
 @click.option(
+    "-l",
     "--ls",
     help="list chats",
     is_flag=True,
 )
 @click.option(
+    "-r",
     "--ls-recent",
     help="list chats by recency",
     is_flag=True,
 )
 @click.option(
     "-vv",
+    "--verbose",
     help="debug verbose output",
     is_flag=True,
 )
@@ -111,6 +114,7 @@ CHATS_CHOICES = click.Choice(_chats())
     is_flag=True,
 )
 @click.option(
+    "-c",
     "--rc",
     help="use most recent chat as context",
     is_flag=True,
