@@ -5,51 +5,77 @@ from pygments.formatters import Terminal256Formatter
 from pygments.lexers import MarkdownLexer
 import click
 import datetime
+import json
 import openai
 import os
 import re
 
 
-HOME = os.environ.get("HOME")
+HOME = os.environ.get("HOME", "~")
+USER_CFG_PATH = os.path.join(HOME, ".ai.config.json")
 
 
 @dataclass
 class Cfg:
-    filename_max_words: int
-    saved_chats_dir: str
-    model: str
-    system_message: str
     abbreviations: dict
+    filename_max_words: int
+    model: str
+    saved_chats_dir: str
+    system_message: str
+    debug: bool = False
+
+    @property
+    def abbreviations_reverse(self):
+        return {v: k for k, v in self.abbreviations.items()}
 
 
-class AI:
-    FILENAME_MAX_WORDS = 10
-    SAVED_CHATS_DIR = f"{HOME}/gd/ai-chats"
-    MODEL = "gpt-3.5-turbo"
-    SYSTEM_MESSAGE = """You are my kind and helpful assistant. I am a writer, software engineer,
-and filmmaker."""
-    ABBREVIATIONS = {"user": "_U_", "assistant": "_A_", "system": "_S_"}
-    ABBREVIATIONS_REVERSE = {v: k for k, v in ABBREVIATIONS.items()}
-    DEBUG = False
+DEFAULT_CFG = {
+    "abbreviations": {"user": "_U_", "assistant": "_A_", "system": "_S_"},
+    "filename_max_words": 10,
+    "saved_chats_dir": "~/gd/ai-chats",
+    "model": "gpt-3.5-turbo",
+    "system_message": "You are my kind and helpful assistant.",
+}
+
+
+def _load_cfg():
+    cfg = DEFAULT_CFG
+    if os.path.exists(USER_CFG_PATH):
+        with open(USER_CFG_PATH) as f:
+            user_cfg = json.load(f)
+            for k, v in cfg.items():
+                if k in user_cfg:
+                    cfg[k] = user_cfg[k]
+
+    return Cfg(**cfg)
+
+
+CFG = _load_cfg()
 
 
 def _chat_path(chat):
-    return os.path.join(AI.SAVED_CHATS_DIR, chat)
+    return os.path.join(CFG.saved_chats_dir, chat)
+
+
+def _filter_chats(chats):
+    return list(set(chats).difference(set([".DS_Store"])))
 
 
 def _chats():
-    if not os.path.exists(AI.SAVED_CHATS_DIR):
+    if not os.path.exists(CFG.saved_chats_dir):
         return []
-    chats = os.listdir(AI.SAVED_CHATS_DIR)
+    chats = os.listdir(CFG.saved_chats_dir)
+    chats = _filter_chats(chats)
     chats.sort()
     return chats
 
 
 def _chats_by_modified_date_desc():
-    if not os.path.exists(AI.SAVED_CHATS_DIR):
+    if not os.path.exists(CFG.saved_chats_dir):
         return []
-    chats = os.listdir(AI.SAVED_CHATS_DIR)
-    chats.sort(key=lambda x: os.path.getmtime(os.path.join(AI.SAVED_CHATS_DIR, x)))
+    chats = os.listdir(CFG.saved_chats_dir)
+    chats = _filter_chats(chats)
+    chats.sort(key=lambda x: os.path.getmtime(os.path.join(CFG.saved_chats_dir, x)))
     chats.reverse()
     return chats
 
@@ -99,7 +125,7 @@ def main(prompt, chat, ls, ls_recent, vv, cat, rc):
         chat = _most_recent_chat()
 
     if vv:
-        AI.DEBUG = True
+        CFG.debug = True
     if cat:
         if not chat:
             print("cat requires a chat name.")
@@ -130,7 +156,7 @@ def _highlight(text: str) -> str:
 
 
 def _dbg(msg: str, label=""):
-    if AI.DEBUG:
+    if CFG.debug:
         label = f"{label}".ljust(6)
         print(f"[DEBUG: {label} ]:  {msg}")
 
@@ -147,7 +173,7 @@ def _slug(prompt: str, with_date=True) -> str:
 
 def _filename(prompt: str) -> str:
     # truncate filename to 10 words:
-    slug_name = " ".join(prompt.split(" ")[: AI.FILENAME_MAX_WORDS])
+    slug_name = " ".join(prompt.split(" ")[: CFG.filename_max_words])
     # slugify and lowercase:
     slug_name = _slug(slug_name).lower()
     # add date:
@@ -172,7 +198,7 @@ def _parse_markdown(markdown: str) -> dict:
             if speaker and message != "":
                 messages.append({"role": speaker, "content": message.strip()})
                 message = ""
-            speaker = AI.ABBREVIATIONS_REVERSE[line[:3]]
+            speaker = CFG.abbreviations_reverse[line[:3]]
             continue
         else:
             message += f"{line}\n"
@@ -190,7 +216,7 @@ def _to_markdown(title: str, messages: list) -> str:
     """
     markdown = f"# {title}\n"
     for message in messages:
-        speaker = AI.ABBREVIATIONS[message["role"]]
+        speaker = CFG.abbreviations[message["role"]]
         content = message["content"]
         markdown += f"\n{speaker}:\n{content.strip()}\n"
     return markdown.strip()
@@ -198,7 +224,7 @@ def _to_markdown(title: str, messages: list) -> str:
 
 def _filepath(title) -> str:
     filename = _filename(title)
-    return os.path.join(AI.SAVED_CHATS_DIR, filename)
+    return os.path.join(CFG.saved_chats_dir, filename)
 
 
 def _save_markdown(messages: list, filepath=None):
@@ -248,12 +274,12 @@ def ask(prompt: str, chat=None):
         parsed = _parse_markdown(markdown)
         messages = parsed["messages"]
     else:
-        messages = [{"role": "system", "content": AI.SYSTEM_MESSAGE}]
+        messages = [{"role": "system", "content": CFG.system_message}]
 
     messages.append(new_message)
 
     completion = openai.ChatCompletion.create(
-        model=AI.MODEL,
+        model=CFG.model,
         messages=messages,
     )
     response = completion.choices[0].message.get("content")
