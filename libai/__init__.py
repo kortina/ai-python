@@ -119,7 +119,7 @@ CHATS_CHOICES = click.Choice(_chats())
     help="use most recent chat as context",
     is_flag=True,
 )
-def main(prompt, chat, ls, ls_recent, vv, cat, rc):
+def main(prompt, chat, ls, ls_recent, verbose, cat, rc):
     """Ask gpt about this prompt."""
     if rc and chat:
         print("[ERROR]: Cannot specify both --rc and --chat.")
@@ -128,7 +128,7 @@ def main(prompt, chat, ls, ls_recent, vv, cat, rc):
         _dbg(f"Using most recent chat: {chat}", "LOAD")
         chat = _most_recent_chat()
 
-    if vv:
+    if verbose:
         CFG.debug = True
     if cat:
         if not chat:
