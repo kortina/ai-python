@@ -1,4 +1,4 @@
-# a.py
+# ai-python
 
 python CLI for an AI Assistant
 
@@ -15,12 +15,11 @@ export OPENAI_API_KEY='sk-...'
 Built with [click][] with Shell Completion in mind. Add to your this `.zshrc` (or see [click][] docs for other shells):
 
 ```zsh
-# assuming you have checked out at `$HOME/src/a.py/`:
-if [ -d "$HOME/src/a.py" ] ; then
-  # add this directory to your path
-  export PATH="$PATH:$HOME/src/a.py"
-  # if you use a.py instead of an alias, change `a` to `a.py`
-  eval "$(_A_COMPLETE=zsh_source a)"
+if [ -d "$HOME/src/ai-python" ] ; then
+  export PATH="$PATH:$HOME/src/ai-python"
+  eval "$(_AI_COMPLETE=zsh_source ai)"
+  # I also alias to just `a` ;)
+  alias a="ai"
 fi
 ```
 

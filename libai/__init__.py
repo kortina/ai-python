@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from dataclasses import dataclass
 from pygments import highlight
 from pygments.formatters import Terminal256Formatter
 from pygments.lexers import MarkdownLexer
@@ -12,13 +13,22 @@ import re
 HOME = os.environ.get("HOME")
 
 
+@dataclass
+class Cfg:
+    filename_max_words: int
+    saved_chats_dir: str
+    model: str
+    system_message: str
+    abbreviations: dict
+
+
 class AI:
     FILENAME_MAX_WORDS = 10
     SAVED_CHATS_DIR = f"{HOME}/gd/ai-chats"
     MODEL = "gpt-3.5-turbo"
     SYSTEM_MESSAGE = """You are my kind and helpful assistant. I am a writer, software engineer,
 and filmmaker."""
-    ABBREVIATIONS = {"_U_": "user", "_A_": "assistant", "_S_": "system"}
+    ABBREVIATIONS = {"user": "_U_", "assistant": "_A_", "system": "_S_"}
     ABBREVIATIONS_REVERSE = {v: k for k, v in ABBREVIATIONS.items()}
     DEBUG = False
 
@@ -162,7 +172,7 @@ def _parse_markdown(markdown: str) -> dict:
             if speaker and message != "":
                 messages.append({"role": speaker, "content": message.strip()})
                 message = ""
-            speaker = AI.ABBREVIATIONS[line[:3]]
+            speaker = AI.ABBREVIATIONS_REVERSE[line[:3]]
             continue
         else:
             message += f"{line}\n"
@@ -180,7 +190,7 @@ def _to_markdown(title: str, messages: list) -> str:
     """
     markdown = f"# {title}\n"
     for message in messages:
-        speaker = AI.ABBREVIATIONS_REVERSE[message["role"]]
+        speaker = AI.ABBREVIATIONS[message["role"]]
         content = message["content"]
         markdown += f"\n{speaker}:\n{content.strip()}\n"
     return markdown.strip()
@@ -197,7 +207,7 @@ def _save_markdown(messages: list, filepath=None):
         filepath = _filepath(title)
         _dbg(f"{filepath}", "CREATE")
     markdown = _to_markdown(title, messages)
-    with open(filepath, "w") as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write(markdown)
 
 
@@ -217,7 +227,7 @@ def _title(messages: list) -> str:
 def _load_chat(chat: str) -> str:
     path = _chat_path(chat)
     _dbg(f"{path}", "LOAD")
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
@@ -233,6 +243,7 @@ def ask(prompt: str, chat=None):
     prompt = f"{prompt}".strip()
 
     if chat:
+        path = _chat_path(chat)
         markdown = _load_chat(chat)
         parsed = _parse_markdown(markdown)
         messages = parsed["messages"]
