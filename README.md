@@ -67,6 +67,16 @@ Save your default configuration to `~/.ai.config.json`, eg:
 
 ## Screenshots
 
-<img width="850" alt="example output" src="https://user-images.githubusercontent.com/5924/228105609-baabbc8e-cdee-4367-82ae-6c2f7b194268.png">
+`ai [PROMPT]`
+
+<img width="970" alt="image" src="https://user-images.githubusercontent.com/5924/228106568-4368133e-2317-43fb-afa1-f465389724e2.png" />
+
+`ai --ls-recent`
+
+<img width="970" alt="image" src="https://user-images.githubusercontent.com/5924/228106617-3f150989-9de6-4309-b499-05f76f616c99.png" />
+
+`ai --cat --chat [CHAT]`
+
+<img width="970" alt="image" src="https://user-images.githubusercontent.com/5924/228106913-7fffdd40-659c-4438-abcc-c3ce9cde3ea8.png">
 
 [click]: https://click.palletsprojects.com/en/8.1.x/shell-completion/
