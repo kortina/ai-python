@@ -32,7 +32,7 @@ class Cfg:
 DEFAULT_CFG = {
     "abbreviations": {"user": "_U_", "assistant": "_A_", "system": "_S_"},
     "filename_max_words": 10,
-    "saved_chats_dir": "~/gd/ai-chats",
+    "saved_chats_dir": "~/ai-chats",
     "model": "gpt-3.5-turbo",
     "system_message": "You are my kind and helpful assistant.",
 }
@@ -47,6 +47,7 @@ def _load_cfg():
                 if k in user_cfg:
                     cfg[k] = user_cfg[k]
 
+    cfg["saved_chats_dir"] = os.path.expanduser(cfg["saved_chats_dir"])
     return Cfg(**cfg)
 
 
