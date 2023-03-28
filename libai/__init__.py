@@ -48,6 +48,9 @@ def _load_cfg():
                     cfg[k] = user_cfg[k]
 
     cfg["saved_chats_dir"] = os.path.expanduser(cfg["saved_chats_dir"])
+    # mkdir -p saved_chats_dir:
+    os.makedirs(cfg["saved_chats_dir"], exist_ok=True)
+
     return Cfg(**cfg)
 
 
