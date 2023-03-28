@@ -9,6 +9,8 @@ import json
 import openai
 import os
 import re
+import sqlite3
+from pathlib import Path
 
 
 HOME = os.environ.get("HOME", "~")
@@ -59,7 +61,7 @@ def _chat_path(chat):
 
 
 def _filter_chats(chats):
-    return list(set(chats).difference(set([".DS_Store"])))
+    return list(set(chats).difference({".DS_Store", "chats.db"}))
 
 
 def _chats():
@@ -240,6 +242,7 @@ def _save_markdown(messages: list, filepath=None):
     markdown = _to_markdown(title, messages)
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(markdown)
+    return filepath
 
 
 # only use the first line of the prompt as the title:
@@ -262,6 +265,55 @@ def _load_chat(chat: str) -> str:
         return f.read()
 
 
+def save_sqlite(message, completion, system_message, path, query_time, response_time):
+    db_path = Path(CFG.saved_chats_dir) / "chats.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS chats
+(id INTEGER PRIMARY KEY, text TEXT NOT NULL, role TEXT NOT NULL, model TEXT NOT NULL, created_at DATETIME NOT NULL, token_count INTEGER NOT NULL, md_path TEXT DEFAULT NULL);"""
+    )
+    c = conn.cursor()
+    insert_q = "INSERT INTO chats (text, role, model, created_at, token_count, md_path) VALUES (?,?,?,?,?,?)"
+    c.execute(
+        insert_q,
+        (
+            message["content"],
+            message["role"],
+            completion["model"],
+            query_time,
+            completion["usage"]["prompt_tokens"],
+            path,
+        ),
+    )
+    for choice in completion["choices"]:
+        print(choice)
+        c.execute(
+            insert_q,
+            (
+                choice["message"]["content"].strip(),
+                choice["message"]["role"],
+                completion["model"],
+                response_time,
+                completion["usage"]["completion_tokens"],
+                path,
+            ),
+        )
+    if system_message:
+        c.execute(
+            insert_q,
+            (
+                system_message["content"],
+                system_message["role"],
+                completion["model"],
+                query_time,
+                0,
+                path,
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+
 def ask(prompt: str, chat=None):
     openai.api_key = os.getenv("OPENAI_API_KEY")
     new_message = {"role": "user", "content": prompt}
@@ -272,6 +324,7 @@ def ask(prompt: str, chat=None):
 
     # remove the leading and trailing whitespace:
     prompt = f"{prompt}".strip()
+    system_message = None
 
     if chat:
         path = _chat_path(chat)
@@ -279,14 +332,17 @@ def ask(prompt: str, chat=None):
         parsed = _parse_markdown(markdown)
         messages = parsed["messages"]
     else:
-        messages = [{"role": "system", "content": CFG.system_message}]
+        system_message = {"role": "system", "content": CFG.system_message}
+        messages = [system_message]
 
     messages.append(new_message)
 
+    query_time = datetime.datetime.now()
     completion = openai.ChatCompletion.create(
         model=CFG.model,
         messages=messages,
     )
+    response_time = datetime.datetime.now()
     response = completion.choices[0].message.get("content")
     _dbg("----------------------------------------\n")
     print("\n")
@@ -297,7 +353,16 @@ def ask(prompt: str, chat=None):
 
     messages.append({"role": "assistant", "content": response})
 
-    _save_markdown(messages, filepath=path)
+    path = _save_markdown(messages, filepath=path)
+    save_sqlite(
+        new_message,
+        completion,
+        system_message=system_message,
+        path=path,
+        query_time=query_time,
+        response_time=response_time,
+    )
+
 
 
 if __name__ == "__main__":
