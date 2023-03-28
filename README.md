@@ -65,4 +65,8 @@ Save your default configuration to `~/.ai.config.json`, eg:
 }
 ```
 
+## Screenshots
+
+<img width="850" alt="example output" src="https://user-images.githubusercontent.com/5924/228105609-baabbc8e-cdee-4367-82ae-6c2f7b194268.png">
+
 [click]: https://click.palletsprojects.com/en/8.1.x/shell-completion/
