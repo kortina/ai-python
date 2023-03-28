@@ -286,7 +286,6 @@ def save_sqlite(message, completion, system_message, path, query_time, response_
         ),
     )
     for choice in completion["choices"]:
-        print(choice)
         c.execute(
             insert_q,
             (
