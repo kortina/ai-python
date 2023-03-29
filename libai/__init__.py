@@ -264,18 +264,27 @@ def _load_chat(chat: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
+CREATE_TABLE = """
+CREATE TABLE IF NOT EXISTS chats
+(
+    id          INTEGER PRIMARY KEY,
+    text        TEXT     NOT NULL,
+    role        TEXT     NOT NULL,
+    model       TEXT     NOT NULL,
+    created_at  DATETIME NOT NULL,
+    token_count INTEGER  NOT NULL,
+    md_path     TEXT DEFAULT NULL
+);
+"""
+INSERT_ROW = "INSERT INTO chats (text, role, model, created_at, token_count, md_path) VALUES (?,?,?,?,?,?)"
 
 def save_sqlite(message, completion, system_message, path, query_time, response_time):
     db_path = Path(CFG.saved_chats_dir) / "chats.db"
     conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS chats
-(id INTEGER PRIMARY KEY, text TEXT NOT NULL, role TEXT NOT NULL, model TEXT NOT NULL, created_at DATETIME NOT NULL, token_count INTEGER NOT NULL, md_path TEXT DEFAULT NULL);"""
-    )
+    conn.execute(CREATE_TABLE)
     c = conn.cursor()
-    insert_q = "INSERT INTO chats (text, role, model, created_at, token_count, md_path) VALUES (?,?,?,?,?,?)"
     c.execute(
-        insert_q,
+        INSERT_ROW,
         (
             message["content"],
             message["role"],
@@ -287,7 +296,7 @@ def save_sqlite(message, completion, system_message, path, query_time, response_
     )
     for choice in completion["choices"]:
         c.execute(
-            insert_q,
+            INSERT_ROW,
             (
                 choice["message"]["content"].strip(),
                 choice["message"]["role"],
@@ -299,7 +308,7 @@ def save_sqlite(message, completion, system_message, path, query_time, response_
         )
     if system_message:
         c.execute(
-            insert_q,
+            INSERT_ROW,
             (
                 system_message["content"],
                 system_message["role"],
