@@ -19,3 +19,5 @@ eggs/
 *.orig
 *~
 *.swp
+.DS_Store
+.idea/
