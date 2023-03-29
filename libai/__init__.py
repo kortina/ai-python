@@ -315,14 +315,14 @@ def save_sqlite(message, completion, system_message, path, query_time, response_
 
 def ask(prompt: str, chat=None):
     openai.api_key = os.getenv("OPENAI_API_KEY")
-    new_message = {"role": "user", "content": prompt}
+    if os.getenv("OPENAI_ORGANIZATION"):
+        openai.organization = os.getenv("OPENAI_ORGANIZATION")
+    new_message = {"role": "user", "content": prompt.strip()}
 
     path = None
 
-    _dbg(f"{prompt}", "PROMPT")
+    _dbg(new_message["content"], "PROMPT")
 
-    # remove the leading and trailing whitespace:
-    prompt = f"{prompt}".strip()
     system_message = None
 
     if chat:
@@ -361,7 +361,6 @@ def ask(prompt: str, chat=None):
         query_time=query_time,
         response_time=response_time,
     )
-
 
 
 if __name__ == "__main__":
