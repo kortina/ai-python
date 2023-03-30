@@ -22,6 +22,7 @@ class Cfg:
     abbreviations: dict
     filename_max_words: int
     model: str
+    pygments_theme: str
     saved_chats_dir: str
     system_message: str
     debug: bool = False
@@ -34,8 +35,9 @@ class Cfg:
 DEFAULT_CFG = {
     "abbreviations": {"user": "_U_", "assistant": "_A_", "system": "_S_"},
     "filename_max_words": 10,
-    "saved_chats_dir": "~/ai-chats",
     "model": "gpt-3.5-turbo",
+    "pygments_theme": "monokai",
+    "saved_chats_dir": "~/ai-chats",
     "system_message": "You are my kind and helpful assistant.",
 }
 
@@ -161,7 +163,7 @@ def _highlight(text: str) -> str:
     # custom_style = TerminalFormatter().style.copy()
     # custom_style.update({"underline": "ansigreen"})
     return highlight(
-        text, MarkdownLexer(), Terminal256Formatter(bg="dark", style="monokai")
+        text, MarkdownLexer(), Terminal256Formatter(bg="dark", style=CFG.pygments_theme)
     )
 
 
@@ -267,6 +269,7 @@ def _load_chat(chat: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
+
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS chats
 (
@@ -280,6 +283,7 @@ CREATE TABLE IF NOT EXISTS chats
 );
 """
 INSERT_ROW = "INSERT INTO chats (text, role, model, created_at, token_count, md_path) VALUES (?,?,?,?,?,?)"
+
 
 def save_sqlite(message, completion, system_message, path, query_time, response_time):
     db_path = Path(CFG.saved_chats_dir) / "chats.db"
