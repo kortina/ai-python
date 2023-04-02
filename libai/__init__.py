@@ -1,65 +1,15 @@
 #!/usr/bin/env python3
-from dataclasses import dataclass
 from pygments import highlight
 from pygments.formatters import Terminal256Formatter
 from pygments.lexers import MarkdownLexer
 import click
 import datetime
-import json
 import openai
 import os
 import re
-import sqlite3
-from pathlib import Path
 
-
-HOME = os.environ.get("HOME", "~")
-USER_CFG_PATH = os.path.join(HOME, ".ai.config.json")
-
-
-@dataclass
-class Cfg:
-    abbreviations: dict
-    filename_max_words: int
-    model: str
-    pygments_theme: str
-    saved_chats_dir: str
-    system_message: str
-    debug: bool = False
-
-    @property
-    def abbreviations_reverse(self):
-        return {v: k for k, v in self.abbreviations.items()}
-
-
-DEFAULT_CFG = {
-    "abbreviations": {"user": "_U_", "assistant": "_A_", "system": "_S_"},
-    "filename_max_words": 10,
-    "model": "gpt-3.5-turbo",
-    "pygments_theme": "monokai",
-    "saved_chats_dir": "~/ai-chats",
-    "system_message": "You are my kind and helpful assistant.",
-}
-
-
-def _load_cfg():
-    cfg = DEFAULT_CFG
-    if os.path.exists(USER_CFG_PATH):
-        with open(USER_CFG_PATH) as f:
-            user_cfg = json.load(f)
-            for k, v in cfg.items():
-                if k in user_cfg:
-                    cfg[k] = user_cfg[k]
-
-    cfg["saved_chats_dir"] = os.path.expanduser(cfg["saved_chats_dir"])
-    # mkdir -p saved_chats_dir:
-    os.makedirs(cfg["saved_chats_dir"], exist_ok=True)
-
-    return Cfg(**cfg)
-
-
-CFG = _load_cfg()
-
+from libai.config import CFG
+from libai.sqlite_util import save_sqlite
 
 def _chat_path(chat):
     return os.path.join(CFG.saved_chats_dir, chat)
@@ -268,66 +218,6 @@ def _load_chat(chat: str) -> str:
     _dbg(f"{path}", "LOAD")
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
-
-
-CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS chats
-(
-    id          INTEGER PRIMARY KEY,
-    text        TEXT     NOT NULL,
-    role        TEXT     NOT NULL,
-    model       TEXT     NOT NULL,
-    created_at  DATETIME NOT NULL,
-    token_count INTEGER  NOT NULL,
-    md_path     TEXT DEFAULT NULL
-);
-"""
-INSERT_ROW = "INSERT INTO chats (text, role, model, created_at, token_count, md_path) VALUES (?,?,?,?,?,?)"
-
-
-def save_sqlite(message, completion, system_message, path, query_time, response_time):
-    db_path = Path(CFG.saved_chats_dir) / "chats.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(CREATE_TABLE)
-    c = conn.cursor()
-    c.execute(
-        INSERT_ROW,
-        (
-            message["content"],
-            message["role"],
-            completion["model"],
-            query_time,
-            completion["usage"]["prompt_tokens"],
-            path,
-        ),
-    )
-    for choice in completion["choices"]:
-        c.execute(
-            INSERT_ROW,
-            (
-                choice["message"]["content"].strip(),
-                choice["message"]["role"],
-                completion["model"],
-                response_time,
-                completion["usage"]["completion_tokens"],
-                path,
-            ),
-        )
-    if system_message:
-        c.execute(
-            INSERT_ROW,
-            (
-                system_message["content"],
-                system_message["role"],
-                completion["model"],
-                query_time,
-                0,
-                path,
-            ),
-        )
-    conn.commit()
-    conn.close()
-
 
 def ask(prompt: str, chat=None):
     openai.api_key = os.getenv("OPENAI_API_KEY")
