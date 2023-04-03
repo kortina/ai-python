@@ -1,5 +1,9 @@
+import datetime
 import sqlite3
 from pathlib import Path
+
+from openai import ChatCompletion
+
 from libai import CFG
 
 CREATE_TABLE = """
@@ -17,7 +21,9 @@ CREATE TABLE IF NOT EXISTS chats
 INSERT_ROW = "INSERT INTO chats (text, role, model, created_at, token_count, md_path) VALUES (?,?,?,?,?,?)"
 
 
-def save_sqlite(message, completion, system_message, path, query_time, response_time):
+def save_sqlite(
+    user_prompt: str, completion: ChatCompletion, system_message: str, path, query_time: datetime, response_time: datetime
+):
     db_path = Path(CFG.saved_chats_dir) / "chats.db"
     conn = sqlite3.connect(str(db_path))
     conn.execute(CREATE_TABLE)
@@ -25,8 +31,8 @@ def save_sqlite(message, completion, system_message, path, query_time, response_
     c.execute(
         INSERT_ROW,
         (
-            message["content"],
-            message["role"],
+            user_prompt.strip(),
+            "user",
             completion["model"],
             query_time,
             completion["usage"]["prompt_tokens"],
@@ -49,8 +55,8 @@ def save_sqlite(message, completion, system_message, path, query_time, response_
         c.execute(
             INSERT_ROW,
             (
-                system_message["content"],
-                system_message["role"],
+                system_message,
+                "system",
                 completion["model"],
                 query_time,
                 0,

@@ -77,7 +77,13 @@ CHATS_CHOICES = click.Choice(_chats())
     help="use most recent chat as context",
     is_flag=True,
 )
-def main(prompt, chat, ls, ls_recent, verbose, cat, rc):
+@click.option(
+    "-i",
+    "--interactive",
+    help="interactive mode",
+    is_flag=True,
+)
+def main(prompt, chat, ls, ls_recent, verbose, cat, rc, interactive):
     """Ask gpt about this prompt."""
     if rc and chat:
         print("[ERROR]: Cannot specify both --rc and --chat.")
@@ -101,7 +107,7 @@ def main(prompt, chat, ls, ls_recent, verbose, cat, rc):
     elif ls_recent:
         print("\n".join(_chats_by_modified_date_desc()))
     elif prompt:
-        ask(prompt, chat)
+        ask(prompt, chat, interactive)
     else:
         print("Provide prompt or specify another option.")
 
@@ -219,7 +225,7 @@ def _load_chat(chat: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-def ask(prompt: str, chat=None):
+def _gen_completion(prompt: str, chat=None):
     openai.api_key = os.getenv("OPENAI_API_KEY")
     if os.getenv("OPENAI_ORGANIZATION"):
         openai.organization = os.getenv("OPENAI_ORGANIZATION")
@@ -229,44 +235,59 @@ def ask(prompt: str, chat=None):
 
     _dbg(new_message["content"], "PROMPT")
 
-    system_message = None
-
     if chat:
         path = _chat_path(chat)
         markdown = _load_chat(chat)
         parsed = _parse_markdown(markdown)
         messages = parsed["messages"]
     else:
-        system_message = {"role": "system", "content": CFG.system_message}
-        messages = [system_message]
+        messages = [{"role": "system", "content": CFG.system_message}]
 
     messages.append(new_message)
 
-    query_time = datetime.datetime.now()
-    completion = openai.ChatCompletion.create(
+    chunk_texts = []
+    for chunk in openai.ChatCompletion.create(
         model=CFG.model,
         messages=messages,
-    )
+        stream=True,
+    ):
+        content = chunk["choices"][0].get("delta", {}).get("content")
+        if content is not None:
+            chunk_texts.append(content)
+            print(content, end='')
+
+    response = ''.join(chunk_texts)
+    messages.append({"role": "assistant", "content": response})
+    save_path = _save_markdown(messages, filepath=path)
+    return response, messages, save_path
+
+
+import sys
+def ask(prompt: str, chat=None, interactive=False):
+    query_time = datetime.datetime.now()
+    response, messages, path = _gen_completion(prompt, chat)
     response_time = datetime.datetime.now()
-    response = completion.choices[0].message.get("content")
+
+    count = response.count("\n")
+    for _ in range(count):
+        sys.stdout.write("\033[F")
+        sys.stdout.write("\033[K")
+
     _dbg("----------------------------------------\n")
     print("\n")
     highlighted_text = _highlight(response)
-    print(highlighted_text)
+    print(highlighted_text, end='')
     print("\n")
     _dbg("----------------------------------------")
 
-    messages.append({"role": "assistant", "content": response})
-
-    path = _save_markdown(messages, filepath=path)
-    save_sqlite(
-        new_message,
-        completion,
-        system_message=system_message,
-        path=path,
-        query_time=query_time,
-        response_time=response_time,
-    )
+    # save_sqlite(
+    #     prompt,
+    #     completion,
+    #     system_message=CFG.system_message if not chat else None,
+    #     path=path,
+    #     query_time=query_time,
+    #     response_time=response_time,
+    # )
 
 
 if __name__ == "__main__":
