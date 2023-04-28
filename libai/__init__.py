@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-from dataclasses import dataclass
-from pygments import highlight
-from pygments.formatters import Terminal256Formatter
-from pygments.lexers import MarkdownLexer
-import click
 import datetime
 import json
-import openai
 import os
 import re
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
+import click
+import openai
+from pygments import highlight
+from pygments.formatters import Terminal256Formatter
+from pygments.lexers import MarkdownLexer
 
 HOME = os.environ.get("HOME", "~")
 USER_CFG_PATH = os.path.join(HOME, ".ai.config.json")
