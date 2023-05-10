@@ -66,7 +66,7 @@ def _chat_path(chat):
 
 
 def _filter_chats(chats):
-    return list(set(chats).difference({".DS_Store", "chats.db"}))
+    return list(set(chats).difference({".DS_Store", "chats.db", ".vscode"}))
 
 
 def _chats():
