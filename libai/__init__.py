@@ -357,7 +357,7 @@ INSERT_ROW = (
 )
 
 
-def save_sqlite(message, response, system_message, path):
+def _save_sqlite(message, model, created_at, token_count, path):
     db_path = Path(CFG.saved_chats_dir) / "chats.db"
     conn = sqlite3.connect(str(db_path))
     conn.execute(CREATE_TABLE)
@@ -367,38 +367,12 @@ def save_sqlite(message, response, system_message, path):
         (
             message.content,
             message.role,
-            response.model,
-            response.query_time,
-            response.token_count,
+            model,
+            created_at,
+            token_count,
             path,
         ),
     )
-    if response.choices:
-        for choice in response.choices:
-            message = choice.message
-            c.execute(
-                INSERT_ROW,
-                (
-                    message.content.strip(),
-                    message.role,
-                    response.model,
-                    response.response_time,
-                    response.token_count,
-                    path,
-                ),
-            )
-    if system_message:
-        c.execute(
-            INSERT_ROW,
-            (
-                system_message.content,
-                system_message.role,
-                response.model,
-                response.query_time,
-                0,
-                path,
-            ),
-        )
     conn.commit()
     conn.close()
 
@@ -429,11 +403,14 @@ class Response:
 class ApiClient(ABC):
     prompt: Optional[str] = None
     chat: Optional[str] = None
+    is_new: bool = True
 
     @abstractmethod
     def __init__(self, chat: Optional[str] = None) -> None:
         _dbg(f"chat: {chat}", "CHAT")
         self.chat = chat
+        if self.chat:
+            self.is_new = False
 
     @abstractmethod
     def response(self, messages):
@@ -468,16 +445,30 @@ class ApiClient(ABC):
 
         _save_markdown(messages, filepath=self.chat_path())
 
-        save_sqlite(
-            new_message,
-            response,
-            system_message=self.system_message(),
+        # For new chats, save the system message and the first user message:
+        if self.is_new:
+            # created_at for is response.query_time
+            # token count is 0
+            self.save_sqlite(self.system_message(), created_at=response.query_time, token_count=0)
+            self.save_sqlite(new_message, created_at=response.query_time, token_count=0)
+        # Always save the response from the model:
+        self.save_sqlite(
+            response.choices[0].message,
+            created_at=response.response_time,
+            token_count=response.token_count,
+        )
+
+    def save_sqlite(self, message: Message, created_at=None, token_count=0):
+        _save_sqlite(
+            message=message,
+            model=self.model(),
+            created_at=created_at,
+            token_count=token_count,
             path=self.chat_path(),
         )
 
     def system_message(self):
-        if not self.chat:
-            return Message(role="system", content=CFG.system_message)
+        return Message(role="system", content=CFG.system_message)
 
     def messages(self) -> List[Message]:
         if self.chat:
