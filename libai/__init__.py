@@ -41,10 +41,6 @@ class Cfg:
     debug: bool = False
     api: Api = Api.GOOGLE
 
-    @property
-    def abbreviations_reverse(self):
-        return {v: k for k, v in self.abbreviations.items()}
-
 
 DEFAULT_CFG = {
     "filename_max_words": 10,
@@ -57,20 +53,24 @@ DEFAULT_CFG = {
 
 
 class Speaker:
-    USER: str = "USER"
-    ASSISTANT: str = "ASSISTANT"
-    SYSTEM: str = "SYSTEM"
+    USER: str = "_USER_"
+    ASSISTANT: str = "_ASSISTANT_"
+    SYSTEM: str = "_SYSTEM_"
 
 
 ABBREVIATIONS = {
+    "user": Speaker.USER,
     "_U_": Speaker.USER,
     "_USER_": Speaker.USER,
+    "assistant": Speaker.ASSISTANT,
     "_A_": Speaker.ASSISTANT,
     "_ASSISTANT_": Speaker.ASSISTANT,
+    "system": Speaker.SYSTEM,
     "_S_": Speaker.SYSTEM,
     "_SYSTEM_": Speaker.SYSTEM,
     "_I_": Speaker.SYSTEM,
     "_INSTRUCTIONS_": Speaker.SYSTEM,
+    "model": Speaker.SYSTEM,
 }
 
 
@@ -232,25 +232,28 @@ def _filename(prompt: str) -> str:
     dt = datetime.datetime.now().strftime("%Y-%m-%d--%H-%M")
     return f"{slug_name}--{dt}.md"
 
+
 # NB: this method MUTATES the messages list
 def _append_message_to(messages, speaker, message) -> str:
     if speaker and message != "":
-        messages.append(Message(role=role, content=content)
+        messages.append(Message(role=speaker, content=message))
         return ""
     return message
 
+
 def _parse_markdown(markdown: str) -> dict:
     title = None
-    messages = []
+    messages: List[Message] = []
     speaker = None
     message = ""
     for line in markdown.splitlines():
         if line.startswith("# ") and not title:
+            # Everything after the "# "
             title = line[2:]
             continue
         elif _is_speaker_line(line):
             message = _append_message_to(messages, speaker, message.strip())
-            # strip the trailing ":" from the line and get the speaker string
+            # strip the trailing ":" from the line and get key to the ABBREVIATIONS dict
             speaker = ABBREVIATIONS[line[:-1]]
             continue
         else:
@@ -264,9 +267,8 @@ def _parse_markdown(markdown: str) -> dict:
 
 def _is_speaker(speaker: str, s: str) -> bool:
     for k, v in ABBREVIATIONS.items():
-        if v == speaker:
-            if s.startswith(f"{k}:"):
-                return True
+        if v == speaker and s.startswith(f"{k}:"):
+            return True
     return False
 
 
@@ -286,7 +288,7 @@ def _is_speaker_line(s: str) -> bool:
     return _is_user(s) or _is_assistant(s) or _is_system(s)
 
 
-def _to_markdown(title: str | None, messages: list) -> str:
+def _to_markdown(title: str | None, messages: list, include_system_message: bool) -> str:
     """
     Given a title and a list of messages, return a markdown string.
     """
@@ -294,7 +296,9 @@ def _to_markdown(title: str | None, messages: list) -> str:
     if title:
         markdown += f"# {title}\n"
     for message in messages:
-        speaker = CFG.abbreviations[message.role]
+        speaker = ABBREVIATIONS[message.role]
+        if speaker == Speaker.SYSTEM and not include_system_message:
+            continue
         content = message.content
         markdown += f"\n{speaker}:\n{content.strip()}\n"
     return markdown.strip()
@@ -310,7 +314,7 @@ def _save_markdown(messages: list, filepath=None):
     if not filepath:
         filepath = _filepath(title)
         _dbg(f"{filepath}", "CREATE")
-    markdown = _to_markdown(title, messages)
+    markdown = _to_markdown(title, messages, include_system_message=True)
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(markdown)
     return filepath
@@ -428,6 +432,7 @@ class ApiClient(ABC):
 
     @abstractmethod
     def __init__(self, chat: Optional[str] = None) -> None:
+        _dbg(f"chat: {chat}", "CHAT")
         self.chat = chat
 
     @abstractmethod
@@ -460,10 +465,6 @@ class ApiClient(ABC):
 
         # append the response:
         messages.append(Message(role="assistant", content=text))
-
-        print("_save_markdown........")
-        print("save_sqlite...........")
-        return
 
         _save_markdown(messages, filepath=self.chat_path())
 
@@ -546,33 +547,60 @@ class Google(ApiClient):
     def model(self):
         return CFG.google_model
 
+    def contents(self, messages):
+        """
+        Given a title and a list of messages, return a markdown string.
+        """
+        _contents = []
+        for message in messages:
+            speaker = ABBREVIATIONS[message.role]
+            if speaker == Speaker.SYSTEM:
+                continue
+            elif speaker == Speaker.USER:
+                speaker = "user"
+            elif speaker == Speaker.ASSISTANT:
+                speaker = "model"
+            else:
+                raise ValueError(f"Speaker `{speaker}` not supported.")
+            _contents.append(
+                {
+                    "parts": [
+                        {
+                            "text": message.content.strip(),
+                        },
+                    ],
+                    "role": speaker,
+                }
+            )
+        return _contents
+
     def response(self, messages):
-        query_time = datetime.datetime.now()
-
-        print("messages: ................")
-        print(messages)
-        print(_to_markdown(None, messages))
-        return None
-        model = genai.GenerativeModel
-
-        completion = openai.ChatCompletion.create(
-            model=self.model(),
-            messages=messages,
+        model = genai.GenerativeModel(
+            model_name=self.model(),
+            system_instruction=self.system_message().content,
         )
+        contents = self.contents(messages)
+        _dbg(contents, "CNTNT")
+
+        query_time = datetime.datetime.now()
+        response = model.generate_content(contents=contents)
         response_time = datetime.datetime.now()
-        choices = []
-        for choice in completion.choices:
+
+        candidates = []
+        for candidate in response.candidates:
+            text = "\n".join([c.text for c in candidate.content.parts])
+            role = candidate.content.role
             m = Message(
-                role=choice["message"]["role"],
-                content=choice["message"]["content"],
+                role=role,
+                content=text,
             )
             rc = ResponseChoice(message=m)
-            choices.append(rc)
+            candidates.append(rc)
 
         return Response(
-            model=completion["model"],
-            choices=choices,
-            token_count=completion["usage"]["completion_tokens"],
+            model=self.model(),
+            choices=candidates,
+            token_count=response.usage_metadata.candidates_token_count,
             query_time=query_time,
             response_time=response_time,
         )
@@ -582,9 +610,9 @@ def ask(api: Api, prompt: str, chat=None):
     prompt = prompt.strip()
 
     if api == Api.OPENAI.value:
-        OpenAI().ask(prompt)
+        OpenAI(chat=chat).ask(prompt)
     elif api == Api.GOOGLE.value:
-        Google().ask(prompt)
+        Google(chat=chat).ask(prompt)
     else:
         raise ValueError(f"Api `{api}` not supported.")
 
